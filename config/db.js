@@ -1,13 +1,18 @@
 import mongoose from "mongoose";
 
+let isConnected = false;
+
 const connectDB = async () => {
+  if (isConnected) return;
+
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("MongoDB connected");
+    const conn = await mongoose.connect(process.env.MONGO_URI);
+    isConnected = true;
+    console.log("✅ MongoDB Connected:", conn.connection.host);
   } catch (err) {
-    console.error(err);
+    console.error("❌ DB Error:", err.message);
     process.exit(1);
   }
 };
 
-export default connectDB; // ✅ ES module default export
+export default connectDB;

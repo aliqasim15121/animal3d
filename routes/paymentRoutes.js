@@ -1,13 +1,136 @@
-import express from "express";
-import { uploadPayment, approvePayment } from "../controllers/paymentController.js";
-import authMiddleware, { verifyAdmin } from "../middleware/authMiddleware.js";
+import { Router } from "express";
+import Payment from "../models/Payment.js";
+import User from "../models/User.js";
+import Module from "../models/Module.js";
+import { protect, adminOnly } from "../middleware/auth.js";
 
-const router = express.Router();
+const router = Router();
 
-// Route for user to upload payment screenshot
-router.post("/upload", authMiddleware, uploadPayment);
+// GET /api/payment
+router.get("/", protect, adminOnly, async (req, res) => {
+  try {
+    const { status, page = 1, limit = 20 } = req.query;
+    const filter = status && status !== "all" ? { status } : {};
 
-// Admin route to approve/reject payment
-router.put("/admin/payment/:id", verifyAdmin, approvePayment);
+    const total = await Payment.countDocuments(filter);
+    const payments = await Payment.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .populate("userId", "name email")
+      .populate("reviewedBy", "name");
+
+    res.json({ payments, total, page: Number(page), pages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error("GET payments error:", err);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+});
+
+// GET /api/payment/stats
+router.get("/stats", protect, adminOnly, async (req, res) => {
+  try {
+    const [total, pending, approved, rejected, totalUsers] = await Promise.all([
+      Payment.countDocuments(),
+      Payment.countDocuments({ status: "pending" }),
+      Payment.countDocuments({ status: "approved" }),
+      Payment.countDocuments({ status: "rejected" }),
+      User.countDocuments({ role: "user" }),
+    ]);
+
+    res.json({ total, pending, approved, rejected, totalUsers });
+  } catch (err) {
+    console.error("GET stats error:", err);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+});
+
+// POST /api/payment/:id/approve
+router.post("/:id/approve", protect, adminOnly, async (req, res) => {
+  try {
+    const { adminNote } = req.body;
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) return res.status(404).json({ message: "Payment not found" });
+    if (payment.status === "approved") return res.status(400).json({ message: "Already approved" });
+
+    const allModules = await Module.find({ isPublished: true }).select("_id");
+
+    let user = await User.findOne({ email: payment.email });
+
+    if (!user) {
+      const phoneValue = payment.phone?.trim() || "00000000000";
+
+      // ✅ pass raw password — User.js pre-save hook handles hashing
+      user = await User.create({
+        name: payment.name,
+        email: payment.email,
+        phone: phoneValue,
+        password: phoneValue,
+        role: "user",
+        isApproved: true,
+        approvedAt: new Date(),
+        moduleAccess: allModules.map((m) => ({ moduleId: m._id })),
+      });
+    } else {
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            isApproved: true,
+            approvedAt: new Date(),
+            moduleAccess: allModules.map((m) => ({ moduleId: m._id })),
+            ...(user.phone ? {} : { phone: payment.phone || "00000000000" }),
+          },
+        }
+      );
+      user = await User.findById(user._id);
+    }
+
+    payment.status = "approved";
+    payment.adminNote = adminNote || "";
+    payment.reviewedAt = new Date();
+    payment.reviewedBy = req.user._id;
+    payment.userId = user._id;
+    await payment.save();
+
+    res.json({ message: "Payment approved", userId: user._id });
+  } catch (err) {
+    console.error("APPROVE error:", err.message);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+});
+
+// POST /api/payment/:id/reject
+router.post("/:id/reject", protect, adminOnly, async (req, res) => {
+  try {
+    const { adminNote } = req.body;
+    const payment = await Payment.findById(req.params.id);
+
+    if (!payment) return res.status(404).json({ message: "Payment not found" });
+
+    payment.status = "rejected";
+    payment.adminNote = adminNote || "";
+    payment.reviewedAt = new Date();
+    payment.reviewedBy = req.user._id;
+    await payment.save();
+
+    res.json({ message: "Payment rejected" });
+  } catch (err) {
+    console.error("REJECT error:", err.message);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+});
+
+// GET /api/payment/my
+router.get("/my", protect, async (req, res) => {
+  try {
+    const payments = await Payment.find({ email: req.user.email }).sort({ createdAt: -1 });
+    res.json(payments);
+  } catch (err) {
+    console.error("MY payments error:", err.message);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+});
 
 export default router;

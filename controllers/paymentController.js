@@ -1,37 +1,105 @@
-// paymentController.js
 import Payment from "../models/Payment.js";
-import User from "../models/User.js";
 
-// Existing uploadPayment function
-export const uploadPayment = async (req, res) => {
-  // ... your existing code
-};
-
-// New approvePayment function
-export const approvePayment = async (req, res) => {
+// Create payment
+export const createPayment = async (req, res) => {
   try {
-    const { id } = req.params;
-    const payment = await Payment.findById(id);
-    if (!payment) return res.status(404).json({ message: "Payment not found" });
+    const { name, email, phone, screenshot } = req.body;
+    const userId = req.user?.id;
 
-    payment.status = "approved";
+    const payment = new Payment({ name, email, phone, screenshot, userId });
     await payment.save();
 
-    const user = await User.findById(payment.userId);
-    if (user) {
-      user.notifications = user.notifications || [];
-      user.notifications.push({
-        message: "Your payment is approved! Click to join the course.",
-        link: `/course/${payment.courseId || "default"}`,
-        read: false,
-        createdAt: new Date(),
-      });
-      await user.save();
+    res.status(201).json({ message: "Payment submitted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get payments
+export const getPayments = async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+
+    const payments = await Payment.find()
+      .select("name email phone screenshot status createdAt")
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Update status
+export const updatePaymentStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
     }
 
-    res.status(200).json({ message: "Payment approved and user notified.", payment });
+    const payment = await Payment.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+
+    if (!payment) return res.status(404).json({ message: "Payment not found" });
+
+    res.json(payment);
   } catch (err) {
-    console.error("APPROVE ERROR:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Approve
+export const approvePayment = async (req, res) => {
+  try {
+    const payment = await Payment.findByIdAndUpdate(
+      req.params.id,
+      { status: "approved" },
+      { new: true }
+    );
+
+    if (!payment) return res.status(404).json({ message: "Payment not found" });
+
+    res.json(payment);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Reject
+export const rejectPayment = async (req, res) => {
+  try {
+    const payment = await Payment.findByIdAndUpdate(
+      req.params.id,
+      { status: "rejected" },
+      { new: true }
+    );
+
+    if (!payment) return res.status(404).json({ message: "Payment not found" });
+
+    res.json(payment);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Dashboard stats
+export const getStats = async (req, res) => {
+  try {
+    const [totalPayments, pending, approved] = await Promise.all([
+      Payment.countDocuments(),
+      Payment.countDocuments({ status: "pending" }),
+      Payment.countDocuments({ status: "approved" }),
+    ]);
+
+    res.json({ totalPayments, pending, approved });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
