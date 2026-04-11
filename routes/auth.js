@@ -12,6 +12,46 @@ const generateToken = (id, role) =>
   jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
 /* =========================
+   SIGNUP
+========================= */
+router.post("/signup", async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body;
+
+    if (!name || !email || !phone || !password)
+      return res.status(400).json({ message: "All fields are required." });
+
+    const existing = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existing)
+      return res.status(400).json({ message: "Email already registered." });
+
+    const hashed = await bcrypt.hash(password, 12);
+
+    const user = await User.create({
+      name,
+      email: email.toLowerCase().trim(),
+      phone,
+      password: hashed,
+    });
+
+    res.status(201).json({
+      token: generateToken(user._id, user.role),
+      user: {
+        id:         user._id,
+        name:       user.name,
+        email:      user.email,
+        role:       user.role,
+        isApproved: user.isApproved || false,
+      },
+    });
+
+  } catch (err) {
+    console.error("[signup]", err);
+    res.status(500).json({ message: "Server error. Please try again." });
+  }
+});
+
+/* =========================
    LOGIN
 ========================= */
 router.post("/login", async (req, res) => {
@@ -130,7 +170,7 @@ router.post("/forgot-password", async (req, res) => {
 
     user.resetOtp        = hashed;
     user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
-    await user.save({ validateBeforeSave: false }); // ✅ skip phone validation
+    await user.save({ validateBeforeSave: false });
 
     await getTransporter().sendMail({
       from:    `"Animal3D Animation" <${process.env.SMTP_USER}>`,
@@ -204,7 +244,7 @@ router.post("/reset-password", async (req, res) => {
     user.password        = await bcrypt.hash(newPassword, 12);
     user.resetOtp        = undefined;
     user.resetOtpExpires = undefined;
-    await user.save({ validateBeforeSave: false }); // ✅ skip phone validation
+    await user.save({ validateBeforeSave: false });
 
     return res.status(200).json({ message: "Password reset successfully." });
 
