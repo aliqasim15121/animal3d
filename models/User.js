@@ -21,11 +21,11 @@ const userSchema = new mongoose.Schema(
 
     isApproved: { type: Boolean, default: false },
     approvedAt: { type: Date },
+    hasCourseAccess:  { type: Boolean, default: false },  // ✅ added
 
-    resetOtp: { type: String, default: undefined }, // hashed OTP
+    resetOtp: { type: String, default: undefined },
     resetOtpExpires: { type: Date, default: undefined },
 
-    // ✅ FIX: moved inside schema
     moduleAccess: [
       {
         moduleId: { type: mongoose.Schema.Types.ObjectId, ref: "Module" },
