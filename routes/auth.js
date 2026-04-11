@@ -122,13 +122,20 @@ router.post("/forgot-password", async (req, res) => {
     user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save({ validateBeforeSave: false });
 
-    await resend.emails.send({
-      from: "Animal3D Animation <noreply@contact.animals3d.online>",
-      to:      user.email,
-      subject: "Your password reset code",
-      html:    otpEmailHtml(otp),
-    });
+    const result = await resend.emails.send({
+  from:    "Animal3D Animation <noreply@contact.animals3d.online>",
+  to:      user.email,
+  subject: "Your password reset code",
+  html:    otpEmailHtml(otp),
+});
 
+// DEBUG LOGS
+console.log("📧 Trying to send to:", user.email);
+console.log("📧 Resend result:", JSON.stringify(result));
+if (result.error) {
+  console.error("❌ Resend error:", result.error);
+  return res.status(500).json({ message: "Email sending failed: " + result.error.message });
+}
     return res.status(200).json({ message: genericMsg });
 
   } catch (err) {
