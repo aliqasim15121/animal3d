@@ -2,54 +2,15 @@ import express    from "express";
 import jwt         from "jsonwebtoken";
 import crypto      from "crypto";
 import bcrypt      from "bcryptjs";
-import nodemailer  from "nodemailer";
+import { Resend }  from "resend";
 import User        from "../models/User.js";
 import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const generateToken = (id, role) =>
   jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-/* =========================
-   SIGNUP
-========================= */
-router.post("/signup", async (req, res) => {
-  try {
-    const { name, email, phone, password } = req.body;
-
-    if (!name || !email || !phone || !password)
-      return res.status(400).json({ message: "All fields are required." });
-
-    const existing = await User.findOne({ email: email.toLowerCase().trim() });
-    if (existing)
-      return res.status(400).json({ message: "Email already registered." });
-
-    const hashed = await bcrypt.hash(password, 12);
-
-    const user = await User.create({
-      name,
-      email: email.toLowerCase().trim(),
-      phone,
-      password: hashed,
-    });
-
-    res.status(201).json({
-      token: generateToken(user._id, user.role),
-      user: {
-        id:         user._id,
-        name:       user.name,
-        email:      user.email,
-        role:       user.role,
-        isApproved: user.isApproved || false,
-      },
-    });
-
-  } catch (err) {
-    console.error("[signup]", err);
-    res.status(500).json({ message: "Server error. Please try again." });
-  }
-});
 
 /* =========================
    LOGIN
@@ -108,17 +69,6 @@ router.get("/me", protect, async (req, res) => {
 /* ─────────────────────────────────────────────────────────────
    HELPERS
 ───────────────────────────────────────────────────────────── */
-const getTransporter = () =>
-  nodemailer.createTransport({
-    host:   "smtp.gmail.com",
-    port:   587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
 const generateOtp = () => crypto.randomInt(100_000, 999_999).toString();
 
 const otpEmailHtml = (otp) => `
@@ -172,8 +122,8 @@ router.post("/forgot-password", async (req, res) => {
     user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save({ validateBeforeSave: false });
 
-    await getTransporter().sendMail({
-      from:    `"Animal3D Animation" <${process.env.SMTP_USER}>`,
+    await resend.emails.send({
+      from:    "Animal3D Animation <onboarding@resend.dev>",
       to:      user.email,
       subject: "Your password reset code",
       html:    otpEmailHtml(otp),
