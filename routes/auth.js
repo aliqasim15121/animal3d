@@ -123,7 +123,7 @@ router.post("/forgot-password", async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     await resend.emails.send({
-      from:    "Animal3D Animation <onboarding@resend.dev>",
+      from: "Animal3D Animation <noreply@contact.animals3d.online>",
       to:      user.email,
       subject: "Your password reset code",
       html:    otpEmailHtml(otp),
