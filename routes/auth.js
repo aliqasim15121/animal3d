@@ -38,7 +38,7 @@ router.post("/login", async (req, res) => {
         name:       user.name,
         email:      user.email,
         role:       user.role,
-        isApproved: user.isApproved,
+isApproved: user.isApproved || user.hasCourseAccess,
       },
     });
   } catch (err) {
@@ -53,7 +53,16 @@ router.get("/me", protect, async (req, res) => {
   const user = await User.findById(req.user._id)
     .populate("moduleAccess.moduleId")
     .select("-password");
-  res.json(user);
+
+  console.log("isApproved:", user.isApproved);
+  console.log("hasaccess:", user.hasaccess);
+
+  const userObj = user.toObject();
+  userObj.isApproved = user.isApproved || user.hasCourseAccess;
+
+  console.log("final isApproved:", userObj.isApproved);
+
+  res.json(userObj);
 });
 
 /* ─────────────────────────────────────────────────────────────
