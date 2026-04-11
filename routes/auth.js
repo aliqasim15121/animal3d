@@ -38,7 +38,7 @@ router.post("/login", async (req, res) => {
         name:       user.name,
         email:      user.email,
         role:       user.role,
-isApproved: user.isApproved || user.hasCourseAccess,
+        isApproved: user.isApproved || user.hasCourseAccess,
       },
     });
   } catch (err) {
@@ -67,9 +67,6 @@ router.get("/me", protect, async (req, res) => {
 
 /* ─────────────────────────────────────────────────────────────
    HELPERS
-   getTransporter() is a FUNCTION — called lazily inside each
-   request so process.env is guaranteed to be loaded by then.
-   Never instantiate nodemailer at module top-level.
 ───────────────────────────────────────────────────────────── */
 const getTransporter = () =>
   nodemailer.createTransport({
@@ -110,15 +107,13 @@ const otpEmailHtml = (otp) => `
       <div class="box"><div class="code">${otp}</div></div>
       <p class="note">If you didn't request this, ignore this email.</p>
     </div>
-    <div class="foot">© ${new Date().getFullYear()} YourApp</div>
+    <div class="foot">© ${new Date().getFullYear()} Animal3D Animation</div>
   </div>
 </body>
 </html>`;
 
 /* =========================
    FORGOT PASSWORD
-   POST /api/auth/forgot-password
-   Body: { email }
 ========================= */
 router.post("/forgot-password", async (req, res) => {
   try {
@@ -134,10 +129,9 @@ router.post("/forgot-password", async (req, res) => {
     const hashed = await bcrypt.hash(otp, 10);
 
     user.resetOtp        = hashed;
-    user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-    await user.save();
+    user.resetOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save({ validateBeforeSave: false }); // ✅ skip phone validation
 
-    // ✅ getTransporter() called HERE (inside the request), not at module load time
     await getTransporter().sendMail({
       from:    `"Animal3D Animation" <${process.env.SMTP_USER}>`,
       to:      user.email,
@@ -155,8 +149,6 @@ router.post("/forgot-password", async (req, res) => {
 
 /* =========================
    VERIFY OTP
-   POST /api/auth/verify-otp
-   Body: { email, otp }
 ========================= */
 router.post("/verify-otp", async (req, res) => {
   try {
@@ -186,8 +178,6 @@ router.post("/verify-otp", async (req, res) => {
 
 /* =========================
    RESET PASSWORD
-   POST /api/auth/reset-password
-   Body: { email, otp, newPassword }
 ========================= */
 router.post("/reset-password", async (req, res) => {
   try {
@@ -211,13 +201,10 @@ router.post("/reset-password", async (req, res) => {
     if (!valid)
       return res.status(400).json({ message: "Incorrect code." });
 
-    // ⚠️ If your User model pre-save hook auto-hashes passwords, use:
-    //      user.password = newPassword;
-    // Otherwise this manual hash is safe:
     user.password        = await bcrypt.hash(newPassword, 12);
     user.resetOtp        = undefined;
     user.resetOtpExpires = undefined;
-    await user.save();
+    await user.save({ validateBeforeSave: false }); // ✅ skip phone validation
 
     return res.status(200).json({ message: "Password reset successfully." });
 
