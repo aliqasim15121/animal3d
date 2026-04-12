@@ -65,7 +65,47 @@ router.get("/me", protect, async (req, res) => {
 
   res.json(userObj);
 });
+/* =========================
+   SIGNUP
+========================= */
+router.post("/signup", async (req, res) => {
+  try {
+    const { name, email, password, whatsapp } = req.body;
 
+    if (!name || !email || !password)
+      return res.status(400).json({ message: "All fields are required." });
+
+    if (password.length < 8)
+      return res.status(400).json({ message: "Password must be at least 8 characters." });
+
+    const existing = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existing)
+      return res.status(400).json({ message: "Email already registered." });
+
+    const newUser = new User({
+      name,
+      email: email.toLowerCase().trim(),
+      password,
+      whatsapp,
+    });
+
+    await newUser.save();
+
+    res.status(201).json({
+      token: generateToken(newUser._id, newUser.role),
+      user: {
+        id:         newUser._id,
+        name:       newUser.name,
+        email:      newUser.email,
+        role:       newUser.role,
+        isApproved: newUser.isApproved || newUser.hasCourseAccess,
+      },
+    });
+  } catch (err) {
+    console.error("[signup]", err);
+    res.status(500).json({ message: "Server error." });
+  }
+});
 /* ─────────────────────────────────────────────────────────────
    HELPERS
 ───────────────────────────────────────────────────────────── */
