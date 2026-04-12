@@ -18,17 +18,14 @@ const generateToken = (id, role) =>
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password)
       return res.status(400).json({ message: "Email and password required" });
 
     const user = await User.findOne({ email });
-
     if (!user || !user.password)
       return res.status(401).json({ message: "Invalid credentials" });
 
     const isMatch = await user.comparePassword(password);
-
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
@@ -47,24 +44,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/* =========================
-   GET CURRENT USER
-========================= */
-router.get("/me", protect, async (req, res) => {
-  const user = await User.findById(req.user._id)
-    .populate("moduleAccess.moduleId")
-    .select("-password");
-
-  console.log("isApproved:", user.isApproved);
-  console.log("hasaccess:", user.hasaccess);
-
-  const userObj = user.toObject();
-  userObj.isApproved = user.isApproved || user.hasCourseAccess;
-
-  console.log("final isApproved:", userObj.isApproved);
-
-  res.json(userObj);
-});
 /* =========================
    SIGNUP
 ========================= */
@@ -86,7 +65,7 @@ router.post("/signup", async (req, res) => {
       name,
       email: email.toLowerCase().trim(),
       password,
-      whatsapp,
+      phone: whatsapp,
     });
 
     await newUser.save();
@@ -106,9 +85,23 @@ router.post("/signup", async (req, res) => {
     res.status(500).json({ message: "Server error." });
   }
 });
-/* ─────────────────────────────────────────────────────────────
+
+/* =========================
+   GET CURRENT USER
+========================= */
+router.get("/me", protect, async (req, res) => {
+  const user = await User.findById(req.user._id)
+    .populate("moduleAccess.moduleId")
+    .select("-password");
+
+  const userObj = user.toObject();
+  userObj.isApproved = user.isApproved || user.hasCourseAccess;
+  res.json(userObj);
+});
+
+/* =========================
    HELPERS
-───────────────────────────────────────────────────────────── */
+========================= */
 const generateOtp = () => crypto.randomInt(100_000, 999_999).toString();
 
 const otpEmailHtml = (otp) => `
@@ -151,6 +144,7 @@ router.post("/forgot-password", async (req, res) => {
     if (!email) return res.status(400).json({ message: "Email is required." });
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
+    console.log("🔍 User found:", !!user);
 
     const genericMsg = "If that email is registered, a reset code has been sent.";
     if (!user) return res.status(200).json({ message: genericMsg });
@@ -163,21 +157,21 @@ router.post("/forgot-password", async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     const result = await resend.emails.send({
-  from:    "Animal3D Animation <noreply@contact.animals3d.online>",
-  to:      user.email,
-  subject: "Your password reset code",
-  html:    otpEmailHtml(otp),
-});
+      from:    "Animal3D Animation <noreply@contact.animals3d.online>",
+      to:      user.email,
+      subject: "Your password reset code",
+      html:    otpEmailHtml(otp),
+    });
 
-// DEBUG LOGS
-console.log("📧 Trying to send to:", user.email);
-console.log("📧 Resend result:", JSON.stringify(result));
-if (result.error) {
-  console.error("❌ Resend error:", result.error);
-  return res.status(500).json({ message: "Email sending failed: " + result.error.message });
-}
+    console.log("📧 Trying to send to:", user.email);
+    console.log("📧 Resend result:", JSON.stringify(result));
+
+    if (result.error) {
+      console.error("❌ Resend error:", result.error);
+      return res.status(500).json({ message: "Email sending failed: " + result.error.message });
+    }
+
     return res.status(200).json({ message: genericMsg });
-
   } catch (err) {
     console.error("[forgot-password]", err);
     return res.status(500).json({ message: "Server error. Please try again." });
@@ -206,7 +200,6 @@ router.post("/verify-otp", async (req, res) => {
       return res.status(400).json({ message: "Incorrect code. Please try again." });
 
     return res.status(200).json({ message: "Code verified." });
-
   } catch (err) {
     console.error("[verify-otp]", err);
     return res.status(500).json({ message: "Server error. Please try again." });
@@ -244,7 +237,6 @@ router.post("/reset-password", async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     return res.status(200).json({ message: "Password reset successfully." });
-
   } catch (err) {
     console.error("[reset-password]", err);
     return res.status(500).json({ message: "Server error. Please try again." });
