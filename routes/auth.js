@@ -231,7 +231,7 @@ router.post("/reset-password", async (req, res) => {
     if (!valid)
       return res.status(400).json({ message: "Incorrect code." });
 
-    user.password        = await bcrypt.hash(newPassword, 12);
+   user.password = newPassword;
     user.resetOtp        = undefined;
     user.resetOtpExpires = undefined;
     await user.save({ validateBeforeSave: false });
