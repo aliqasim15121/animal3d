@@ -49,7 +49,7 @@ router.post("/login", async (req, res) => {
 ========================= */
 router.post("/signup", async (req, res) => {
   try {
-    const { name, email, password, whatsapp } = req.body;
+    const { name, email, password, phone } = req.body;
 
     if (!name || !email || !password)
       return res.status(400).json({ message: "All fields are required." });
@@ -65,7 +65,7 @@ router.post("/signup", async (req, res) => {
       name,
       email: email.toLowerCase().trim(),
       password,
-      phone: whatsapp,
+      phone,
     });
 
     await newUser.save();
