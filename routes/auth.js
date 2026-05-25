@@ -3,11 +3,13 @@ import jwt         from "jsonwebtoken";
 import crypto      from "crypto";
 import bcrypt      from "bcryptjs";
 import { Resend }  from "resend";
+import { OAuth2Client } from "google-auth-library"; // ✅ new
 import User        from "../models/User.js";
 import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 const resend = new Resend(process.env.RESEND_API_KEY);
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID); // ✅ new
 
 const generateToken = (id, role) =>
   jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "7d" });
@@ -44,6 +46,52 @@ router.post("/login", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* =========================
+   GOOGLE LOGIN ✅
+========================= */
+router.post("/google", async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: "Token is required" });
+
+    // Verify the Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const { name, email, picture, sub: googleId } = ticket.getPayload();
+
+    // Find existing user or create new one
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        name,
+        email,
+        picture,
+        googleId,
+        // No password needed for Google users
+      });
+    }
+
+    res.json({
+      token: generateToken(user._id, user.role),
+      user: {
+        id:         user._id,
+        name:       user.name,
+        email:      user.email,
+        role:       user.role,
+        isApproved: user.isApproved || user.hasCourseAccess,
+      },
+    });
+
+  } catch (err) {
+    console.error("[google-login]", err);
+    res.status(401).json({ message: "Google login failed" });
   }
 });
 

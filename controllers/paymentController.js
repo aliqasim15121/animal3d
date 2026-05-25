@@ -3,10 +3,10 @@ import Payment from "../models/Payment.js";
 // Create payment
 export const createPayment = async (req, res) => {
   try {
-    const { name, email, phone, screenshot } = req.body;
+    const { name, email, phone, screenshot,courseType } = req.body;
     const userId = req.user?.id;
 
-    const payment = new Payment({ name, email, phone, screenshot, userId });
+    const payment = new Payment({ name, email, phone, screenshot,CourseType, userId });
     await payment.save();
 
     res.status(201).json({ message: "Payment submitted successfully" });

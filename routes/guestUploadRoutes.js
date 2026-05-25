@@ -17,16 +17,20 @@ router.post("/", upload.single("screenshot"), async (req, res) => {
       return res.status(400).json({ message: "Payment screenshot is required" });
     }
 
-    // ✅ hash password before saving
     const hashedPassword = await bcrypt.hash(password, 10);
     const screenshotUrl = req.file.path;
+
+    const courseType = req.body.courseType
+      ? req.body.courseType.split(",").map(s => s.trim())
+      : [];
 
     const payment = await Payment.create({
       name: name.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
-      password: hashedPassword, // ✅ save hashed password
+      password: hashedPassword,
       screenshotUrl,
+      courseType,
     });
 
     res.status(201).json({

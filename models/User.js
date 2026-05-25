@@ -13,15 +13,19 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
-    phone: { type: String, required: true, trim: true },
+    phone: { type: String, trim: true }, // ✅ removed required (Google users have no phone)
 
     password: { type: String },
+
+    // ✅ Google OAuth fields
+    googleId: { type: String, default: undefined },
+    picture:  { type: String, default: undefined },
 
     role: { type: String, enum: ["user", "admin"], default: "user" },
 
     isApproved: { type: Boolean, default: false },
     approvedAt: { type: Date },
-    hasCourseAccess:  { type: Boolean, default: false },  // ✅ added
+    hasCourseAccess: { type: Boolean, default: false },
 
     resetOtp: { type: String, default: undefined },
     resetOtpExpires: { type: Date, default: undefined },

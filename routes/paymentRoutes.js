@@ -45,6 +45,17 @@ router.get("/stats", protect, adminOnly, async (req, res) => {
   }
 });
 
+// GET /api/payment/my
+router.get("/my", protect, async (req, res) => {
+  try {
+    const payments = await Payment.find({ email: req.user.email }).sort({ createdAt: -1 });
+    res.json(payments);
+  } catch (err) {
+    console.error("MY payments error:", err.message);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+});
+
 // POST /api/payment/:id/approve
 router.post("/:id/approve", protect, adminOnly, async (req, res) => {
   try {
@@ -61,7 +72,6 @@ router.post("/:id/approve", protect, adminOnly, async (req, res) => {
     if (!user) {
       const phoneValue = payment.phone?.trim() || "00000000000";
 
-      // ✅ pass raw password — User.js pre-save hook handles hashing
       user = await User.create({
         name: payment.name,
         email: payment.email,
@@ -122,13 +132,14 @@ router.post("/:id/reject", protect, adminOnly, async (req, res) => {
   }
 });
 
-// GET /api/payment/my
-router.get("/my", protect, async (req, res) => {
+// DELETE /api/payment/:id
+router.delete("/:id", protect, adminOnly, async (req, res) => {
   try {
-    const payments = await Payment.find({ email: req.user.email }).sort({ createdAt: -1 });
-    res.json(payments);
+    const payment = await Payment.findByIdAndDelete(req.params.id);
+    if (!payment) return res.status(404).json({ message: "Payment not found" });
+    res.json({ message: "Payment deleted" });
   } catch (err) {
-    console.error("MY payments error:", err.message);
+    console.error("DELETE payment error:", err.message);
     res.status(500).json({ message: err.message || "Server error" });
   }
 });

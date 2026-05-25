@@ -5,6 +5,11 @@ const paymentSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, lowercase: true, trim: true },
     phone: { type: String, required: true, trim: true },
+    courseType: {
+      type: [String],
+      enum: ["full_course", "textures", "asset_pack"],
+      default: [],
+    },
     password: { type: String, required: true },
     screenshotUrl: { type: String, required: true },
 

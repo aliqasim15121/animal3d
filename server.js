@@ -140,6 +140,7 @@
 // startServer();
 
 // export default app;
+import "./config/env.js"; 
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -152,7 +153,7 @@ import authRoutes from "./routes/auth.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import guestUploadRoutes from "./routes/guestUploadRoutes.js";
-
+import reviewRoutes from "./routes/reviewRoutes.js";
 dotenv.config();
 
 const app = express();
@@ -200,7 +201,7 @@ app.use("/api/auth", authRoutes);       // ✅ includes /forgot-password, /verif
 app.use("/api/payment", paymentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/guest-upload", guestUploadRoutes);
-
+app.use("/api", reviewRoutes);
 /* =========================
    HEALTH CHECK
 ========================= */
