@@ -1,18 +1,13 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
-import Enrollment from "../models/Payment.js";
 import Review from "../models/Review.js";
 
 const router = express.Router();
 
+// ── Check enrollment (now uses isApproved from User) ──
 router.get("/check-enrollment/:courseId", protect, async (req, res) => {
   try {
-    const enrolled = await Enrollment.findOne({
-      userId: req.user.id,
-      courseType: { $in: [req.params.courseId] },
-      status: "approved",
-    });
-    res.json({ enrolled: !!enrolled });
+    res.json({ enrolled: req.user.isApproved === true });
   } catch (err) {
     res.status(500).json({ enrolled: false, error: err.message });
   }
@@ -29,8 +24,13 @@ router.get("/reviews/:courseId", async (req, res) => {
   }
 });
 
+// ── POST a review (only approved users) ──
 router.post("/reviews", protect, async (req, res) => {
   try {
+    if (!req.user.isApproved) {
+      return res.status(403).json({ error: "You must be enrolled to post a review." });
+    }
+
     const { courseId, rating, name, review } = req.body;
     await Review.create({
       user: req.user.id,
