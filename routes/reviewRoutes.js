@@ -1,7 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/auth.js";
 import Review from "../models/Review.js";
-
 const router = express.Router();
 
 // ── Check enrollment (now uses isApproved from User) ──
