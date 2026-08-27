@@ -140,6 +140,8 @@
 // startServer();
 
 // export default app;
+// import dns from "dns";
+// dns.setServers(["8.8.8.8", "8.8.4.4"]);
 import "./config/env.js"; 
 import express from "express";
 import dotenv from "dotenv";
@@ -154,9 +156,15 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import guestUploadRoutes from "./routes/guestUploadRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
+import polarRoutes from "./routes/polarRoutes.js";
+import geoip from "geoip-lite";
 dotenv.config();
+console.log("SUCCESS URL:", process.env.POLAR_SUCCESS_URL);
+
 
 const app = express();
+
+app.set("trust proxy", true);
 
 /* =========================
    PATH SETUP
@@ -170,10 +178,12 @@ const __dirname = path.dirname(__filename);
 app.use(
   cors({
     origin: [
-      "http://localhost:5173",
-      process.env.FRONTEND_URL,
-      "https://animals3d.online",
-    ],
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  process.env.FRONTEND_URL,
+  "https://animals3d.online",
+],
     credentials: true,
   })
 );
@@ -202,6 +212,24 @@ app.use("/api/payment", paymentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/guest-upload", guestUploadRoutes);
 app.use("/api", reviewRoutes);
+app.use("/api/polar", polarRoutes); // ✅ includes /checkout
+app.get("/api/location", (req, res) => {
+  let ip = req.ip || req.socket.remoteAddress;
+
+  if (ip?.startsWith("::ffff:")) {
+    ip = ip.replace("::ffff:", "");
+  }
+
+  const geo = geoip.lookup(ip);
+
+  const country = geo?.country || "UNKNOWN";
+  const currency = country === "PK" ? "PKR" : "USD";
+
+  res.json({
+    country,
+    currency,
+  });
+});
 /* =========================
    HEALTH CHECK
 ========================= */

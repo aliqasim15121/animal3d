@@ -6,6 +6,7 @@ const router = express.Router();
 // ── Check enrollment (now uses isApproved from User) ──
 router.get("/check-enrollment/:courseId", protect, async (req, res) => {
   try {
+    if (req.user.role === "admin") return res.json({ enrolled: true });
     res.json({ enrolled: req.user.isApproved === true });
   } catch (err) {
     res.status(500).json({ enrolled: false, error: err.message });
@@ -26,7 +27,7 @@ router.get("/reviews/:courseId", async (req, res) => {
 // ── POST a review (only approved users) ──
 router.post("/reviews", protect, async (req, res) => {
   try {
-    if (!req.user.isApproved) {
+    if (req.user.role !== "admin" && !req.user.isApproved) {
       return res.status(403).json({ error: "You must be enrolled to post a review." });
     }
 
