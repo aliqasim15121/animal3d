@@ -14,8 +14,16 @@ router.post("/checkout", async (req, res) => {
   try {
     console.log("POLAR_SUCCESS_URL:", process.env.POLAR_SUCCESS_URL);
 
+    const { products } = req.body;
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({
+        message: "No products selected",
+      });
+    }
+
     const checkout = await polar.checkouts.create({
-      products: ["1aae7445-2b15-4146-abb0-42f8fb9e679e"],
+      products,
       successUrl: process.env.POLAR_SUCCESS_URL,
     });
 
@@ -29,10 +37,12 @@ router.post("/checkout", async (req, res) => {
     });
   } catch (error) {
     console.error("Polar checkout error:", error);
-    res.status(500).json({ message: "Unable to create Polar checkout" });
+
+    res.status(500).json({
+      message: "Unable to create Polar checkout",
+    });
   }
 });
-
 // NEW: fetch a checkout's real details by ID (used by the success page)
 router.get("/checkout/:checkoutId", async (req, res) => {
   try {
