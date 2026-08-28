@@ -15,7 +15,7 @@ router.post("/checkout", async (req, res) => {
     console.log("POLAR_SUCCESS_URL:", process.env.POLAR_SUCCESS_URL);
 
     const checkout = await polar.checkouts.create({
-      products: ["87025298-228d-4f51-b157-c8724dcb2af0"],
+      products: ["1aae7445-2b15-4146-abb0-42f8fb9e679e"],
       successUrl: process.env.POLAR_SUCCESS_URL,
     });
 
