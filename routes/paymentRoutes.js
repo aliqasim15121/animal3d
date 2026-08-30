@@ -65,7 +65,11 @@ router.post("/:id/approve", protect, adminOnly, async (req, res) => {
     if (!payment) return res.status(404).json({ message: "Payment not found" });
     if (payment.status === "approved") return res.status(400).json({ message: "Already approved" });
 
-    const allModules = await Module.find({ isPublished: true }).select("_id");
+    const includesCourse = payment.courseType?.includes("full_course");
+
+const allModules = includesCourse
+  ? await Module.find({ isPublished: true }).select("_id")
+  : [];
 
     let user = await User.findOne({ email: payment.email });
 
@@ -78,20 +82,32 @@ router.post("/:id/approve", protect, adminOnly, async (req, res) => {
         phone: phoneValue,
         password: phoneValue,
         role: "user",
-        isApproved: true,
-        approvedAt: new Date(),
-        moduleAccess: allModules.map((m) => ({ moduleId: m._id })),
+        isApproved: includesCourse,
+hasCourseAccess: includesCourse,
+approvedAt: includesCourse ? new Date() : undefined,
+moduleAccess: includesCourse
+  ? allModules.map((m) => ({ moduleId: m._id }))
+  : [],
       });
     } else {
       await User.updateOne(
         { _id: user._id },
         {
           $set: {
-            isApproved: true,
-            approvedAt: new Date(),
-            moduleAccess: allModules.map((m) => ({ moduleId: m._id })),
-            ...(user.phone ? {} : { phone: payment.phone || "00000000000" }),
-          },
+  ...(includesCourse
+    ? {
+        isApproved: true,
+        hasCourseAccess: true,
+        approvedAt: new Date(),
+        moduleAccess: allModules.map((m) => ({
+          moduleId: m._id,
+        })),
+      }
+    : {}),
+  ...(user.phone
+    ? {}
+    : { phone: payment.phone || "00000000000" }),
+},
         }
       );
       user = await User.findById(user._id);

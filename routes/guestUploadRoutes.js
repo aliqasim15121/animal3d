@@ -17,16 +17,47 @@ router.post("/", upload.single("screenshot"), async (req, res) => {
       return res.status(400).json({ message: "Payment screenshot is required" });
     }
 
+const normalizedEmail = email.trim().toLowerCase();
+
+const courseType = req.body.courseType
+  ? req.body.courseType
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  : [];
+
+if (courseType.length === 0) {
+  return res.status(400).json({
+    message: "Please select at least one product or package.",
+  });
+}
+
+const existingPayments = await Payment.find({
+  email: normalizedEmail,
+  status: { $in: ["pending", "approved"] },
+}).select("courseType status");
+
+const duplicateProducts = courseType.filter((product) =>
+  existingPayments.some((payment) =>
+    payment.courseType?.includes(product)
+  )
+);
+
+if (duplicateProducts.length > 0) {
+  return res.status(409).json({
+    message:
+      "A payment submission already exists for one or more selected products.",
+    duplicateProducts,
+  });
+}
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const screenshotUrl = req.file.path;
 
-    const courseType = req.body.courseType
-      ? req.body.courseType.split(",").map(s => s.trim())
-      : [];
 
     const payment = await Payment.create({
       name: name.trim(),
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       phone: phone.trim(),
       password: hashedPassword,
       screenshotUrl,
