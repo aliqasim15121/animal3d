@@ -6,13 +6,101 @@ import { Resend }  from "resend";
 import { OAuth2Client } from "google-auth-library";
 import User        from "../models/User.js";
 import { protect } from "../middleware/auth.js";
+import DeviceApprovalRequest from "../models/DeviceApprovalRequest.js";
+import TrustedDevice from "../models/TrustedDevice.js";
+import RefreshSession from "../models/RefreshSession.js";
+import LoginEvent from "../models/LoginEvent.js";
+
+import {
+  hashToken,
+  generateSecureToken,
+  getRequestSecurityInfo,
+  setTrustedDeviceCookie,
+  getCookieValue,
+  DEVICE_COOKIE_NAME,
+} from "../utils/deviceSecurity.js";
 
 const router = express.Router();
 const resend = new Resend(process.env.RESEND_API_KEY);
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const generateToken = (id, role) =>
-  jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const generateToken = (id, role, authVersion = 1) =>
+  jwt.sign(
+    { id, role, authVersion },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+const handleStudentDeviceLogin = async (user, req, loginMethod) => {
+  const securityInfo = getRequestSecurityInfo(req);
+
+  const rawDeviceToken = getCookieValue(
+    req,
+    DEVICE_COOKIE_NAME
+  );
+
+  if (rawDeviceToken) {
+    const deviceTokenHash = hashToken(rawDeviceToken);
+
+    const trustedDevice = await TrustedDevice.findOne({
+      userId: user._id,
+      tokenHash: deviceTokenHash,
+      isActive: true,
+    });
+
+    if (trustedDevice) {
+      trustedDevice.lastSeenAt = new Date();
+      trustedDevice.lastIp = securityInfo.ip;
+      trustedDevice.lastCountry = securityInfo.country;
+      trustedDevice.lastCity = securityInfo.city;
+
+      await trustedDevice.save();
+
+      return {
+        allowed: true,
+        securityInfo,
+      };
+    }
+  }
+
+
+
+  const rawRequestToken = generateSecureToken();
+  const requestTokenHash = hashToken(rawRequestToken);
+
+  const approvalRequest =
+    await DeviceApprovalRequest.create({
+      userId: user._id,
+
+      requestTokenHash,
+
+      status: "pending",
+
+      deviceName: securityInfo.deviceName,
+      browser: securityInfo.browser,
+      platform: securityInfo.platform,
+      userAgent: securityInfo.userAgent,
+      screenResolution: securityInfo.screenResolution,
+      timezone: securityInfo.timezone,
+      fingerprint: securityInfo.fingerprint,
+
+      ip: securityInfo.ip,
+      country: securityInfo.country,
+      city: securityInfo.city,
+
+      loginMethod,
+
+      expiresAt: new Date(
+        Date.now() + 30 * 60 * 1000
+      ),
+    });
+
+  return {
+    allowed: false,
+    requestToken: rawRequestToken,
+    requestId: approvalRequest._id,
+    securityInfo,
+  };
+};
 
 /* =========================
    LOGIN
@@ -20,29 +108,127 @@ const generateToken = (id, role) =>
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ message: "Email and password required" });
 
-    const user = await User.findOne({ email });
-    if (!user || !user.password)
-      return res.status(401).json({ message: "Invalid credentials" });
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email and password are required",
+      });
+    }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch)
-      return res.status(401).json({ message: "Invalid credentials" });
+    const normalizedEmail = email
+      .toLowerCase()
+      .trim();
 
-    res.json({
-      token: generateToken(user._id, user.role),
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!user || !user.password) {
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
+    }
+
+    const isMatch =
+      await user.comparePassword(password);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
+    }
+
+    // Admin accounts are NOT restricted by device binding
+    if (user.role === "admin") {
+      return res.json({
+        token: generateToken(
+          user._id,
+          user.role,
+          user.authVersion || 1
+        ),
+
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isApproved:
+            user.isApproved ||
+            user.hasCourseAccess,
+        },
+      });
+    }
+
+    const deviceResult =
+      await handleStudentDeviceLogin(
+        user,
+        req,
+        "password"
+      );
+
+    if (!deviceResult.allowed) {
+      return res.status(202).json({
+        status: "approval_required",
+
+        message:
+          "Device approval is required before you can login.",
+
+        requestToken:
+          deviceResult.requestToken,
+
+        requestId:
+          deviceResult.requestId,
+
+        device: {
+          deviceName:
+            deviceResult.securityInfo.deviceName,
+
+          browser:
+            deviceResult.securityInfo.browser,
+
+          platform:
+            deviceResult.securityInfo.platform,
+
+          ip:
+            deviceResult.securityInfo.ip,
+
+          country:
+            deviceResult.securityInfo.country,
+
+          city:
+            deviceResult.securityInfo.city,
+        },
+      });
+    }
+
+    user.deviceBindingInitialized = true;
+    user.requiresDeviceApproval = false;
+
+    await user.save();
+
+    return res.json({
+      token: generateToken(
+        user._id,
+        user.role,
+        user.authVersion || 1
+      ),
+
       user: {
-        id:         user._id,
-        name:       user.name,
-        email:      user.email,
-        role:       user.role,
-        isApproved: user.isApproved || user.hasCourseAccess,
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isApproved:
+          user.isApproved ||
+          user.hasCourseAccess,
       },
     });
-  } catch (err) {
-    res.status(500).json({ message: "Server error" });
+  } catch (error) {
+    console.error("Login error:", error);
+
+    return res.status(500).json({
+      message: "Login failed",
+    });
   }
 });
 
@@ -94,40 +280,133 @@ router.post("/signup", async (req, res) => {
 router.post("/google", async (req, res) => {
   try {
     const { token } = req.body;
-    if (!token) return res.status(400).json({ message: "Token is required" });
+
+    if (!token) {
+      return res.status(400).json({
+        message: "Google token is required",
+      });
+    }
 
     const ticket = await googleClient.verifyIdToken({
       idToken: token,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
-    const { name, email, picture, sub: googleId } = ticket.getPayload();
+    const {
+      name,
+      email,
+      picture,
+      sub: googleId,
+    } = ticket.getPayload();
 
-    let user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    let user = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (!user) {
       user = await User.create({
         name,
-        email,
+        email: normalizedEmail,
         picture,
         googleId,
       });
     }
 
-    res.json({
-      token: generateToken(user._id, user.role),
+    // Admin accounts bypass device binding
+    if (user.role === "admin") {
+      return res.json({
+        token: generateToken(
+          user._id,
+          user.role,
+          user.authVersion || 1
+        ),
+
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          picture: user.picture,
+          isApproved:
+            user.isApproved ||
+            user.hasCourseAccess,
+        },
+      });
+    }
+
+    const deviceResult =
+      await handleStudentDeviceLogin(
+        user,
+        req,
+        "google"
+      );
+
+    if (!deviceResult.allowed) {
+      return res.status(202).json({
+        status: "approval_required",
+
+        message:
+          "Device approval is required before you can login.",
+
+        requestToken:
+          deviceResult.requestToken,
+
+        requestId:
+          deviceResult.requestId,
+
+        device: {
+          deviceName:
+            deviceResult.securityInfo.deviceName,
+
+          browser:
+            deviceResult.securityInfo.browser,
+
+          platform:
+            deviceResult.securityInfo.platform,
+
+          ip:
+            deviceResult.securityInfo.ip,
+
+          country:
+            deviceResult.securityInfo.country,
+
+          city:
+            deviceResult.securityInfo.city,
+        },
+      });
+    }
+
+    user.deviceBindingInitialized = true;
+    user.requiresDeviceApproval = false;
+
+    await user.save();
+
+    return res.json({
+      token: generateToken(
+        user._id,
+        user.role,
+        user.authVersion || 1
+      ),
+
       user: {
-        id:         user._id,
-        name:       user.name,
-        email:      user.email,
-        role:       user.role,
-        isApproved: user.isApproved || user.hasCourseAccess,
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        picture: user.picture,
+        isApproved:
+          user.isApproved ||
+          user.hasCourseAccess,
       },
     });
+  } catch (error) {
+    console.error("Google login error:", error);
 
-  } catch (err) {
-    console.error("[google-login]", err);
-    res.status(401).json({ message: "Google login failed" });
+    return res.status(401).json({
+      message: "Google login failed",
+    });
   }
 });
 
@@ -285,6 +564,141 @@ router.post("/reset-password", async (req, res) => {
   } catch (err) {
     console.error("[reset-password]", err);
     return res.status(500).json({ message: "Server error. Please try again." });
+  }
+});
+
+// Check device approval status
+router.post("/device-approval-status", async (req, res) => {
+  try {
+    const { requestToken } = req.body;
+
+    if (!requestToken) {
+      return res.status(400).json({
+        message: "Request token is required",
+      });
+    }
+
+    const requestTokenHash = hashToken(requestToken);
+
+    const approvalRequest = await DeviceApprovalRequest.findOne({
+      requestTokenHash,
+    });
+
+    if (!approvalRequest) {
+      return res.status(404).json({
+        message: "Device approval request not found",
+      });
+    }
+
+    if (
+      approvalRequest.status === "pending" &&
+      approvalRequest.expiresAt <= new Date()
+    ) {
+      approvalRequest.status = "expired";
+      await approvalRequest.save();
+
+      return res.status(400).json({
+        status: "expired",
+        message: "Device approval request has expired",
+      });
+    }
+
+    if (approvalRequest.status === "pending") {
+      return res.json({
+        status: "pending",
+        message: "Device approval is still pending",
+      });
+    }
+
+    if (approvalRequest.status === "rejected") {
+      return res.status(403).json({
+        status: "rejected",
+        message: "This device request was rejected",
+      });
+    }
+
+    if (approvalRequest.status === "expired") {
+      return res.status(400).json({
+        status: "expired",
+        message: "Device approval request has expired",
+      });
+    }
+
+    if (approvalRequest.status !== "approved") {
+      return res.status(400).json({
+        message: "Invalid device approval state",
+      });
+    }
+
+    const user = await User.findById(approvalRequest.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    if (user.role === "admin") {
+      return res.status(400).json({
+        message: "Admin accounts do not use device approval",
+      });
+    }
+
+    let existingDevice = await TrustedDevice.findOne({
+      userId: user._id,
+      fingerprint: approvalRequest.fingerprint,
+      isActive: true,
+    });
+
+    if (!existingDevice) {
+      const rawDeviceToken = generateSecureToken();
+      const deviceTokenHash = hashToken(rawDeviceToken);
+
+      existingDevice = await TrustedDevice.create({
+        userId: user._id,
+        tokenHash: deviceTokenHash,
+
+        deviceName: approvalRequest.deviceName,
+        browser: approvalRequest.browser,
+        platform: approvalRequest.platform,
+        userAgent: approvalRequest.userAgent,
+        screenResolution: approvalRequest.screenResolution,
+        timezone: approvalRequest.timezone,
+        fingerprint: approvalRequest.fingerprint,
+
+        lastIp: approvalRequest.ip,
+        lastCountry: approvalRequest.country,
+        lastCity: approvalRequest.city,
+
+        isActive: true,
+        approvedAt: new Date(),
+        lastSeenAt: new Date(),
+      });
+
+      setTrustedDeviceCookie(res, rawDeviceToken);
+    }
+
+    user.deviceBindingInitialized = true;
+    user.requiresDeviceApproval = false;
+
+    await user.save();
+    await LoginEvent.create({
+  userId: user._id,
+  eventType: "trusted_device_reset",
+  loginMethod: "admin",
+  result: "reset",
+});
+
+    return res.json({
+      status: "approved",
+      message: "Device approved successfully. Please login again.",
+    });
+  } catch (error) {
+    console.error("Device approval status error:", error);
+
+    return res.status(500).json({
+      message: "Failed to check device approval status",
+    });
   }
 });
 

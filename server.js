@@ -214,18 +214,36 @@ app.use("/api/guest-upload", guestUploadRoutes);
 app.use("/api", reviewRoutes);
 app.use("/api/polar", polarRoutes); // ✅ includes /checkout
 app.get("/api/location", (req, res) => {
-  let ip = req.ip || req.socket.remoteAddress;
+  let ip = req.ip || req.socket?.remoteAddress || "";
 
   if (ip?.startsWith("::ffff:")) {
     ip = ip.replace("::ffff:", "");
   }
 
-  const geo = geoip.lookup(ip);
+  if (ip === "::1") {
+    ip = "127.0.0.1";
+  }
 
-  const country = geo?.country || "UNKNOWN";
+  const geo =
+    ip === "127.0.0.1"
+      ? null
+      : geoip.lookup(ip);
+
+  const country =
+    ip === "127.0.0.1"
+      ? "LOCAL"
+      : geo?.country || "UNKNOWN";
+
+  const city =
+    ip === "127.0.0.1"
+      ? "Localhost"
+      : geo?.city || "Unknown";
+
   const currency = country === "PK" ? "PKR" : "USD";
 
   res.json({
+    ip,
+    city,
     country,
     currency,
   });
