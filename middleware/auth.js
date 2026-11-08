@@ -18,7 +18,13 @@ export const protect = async (req, res, next) => { // ← async
     
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+    // Only a bad/expired token is a real 401 (logout).
+    // DB/network hiccups must NOT log the user out.
+    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError" || error.name === "NotBeforeError") {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    console.error("protect middleware error:", error);
+    return res.status(503).json({ message: "Server busy, please retry" });
   }
 };
 
