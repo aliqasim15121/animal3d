@@ -28,14 +28,13 @@ router.get("/payments", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch payments" });
   }
 });
-// All approved students (from Users, includes those without a Payment record)
+// All students (from Users, includes those without a Payment record)
 router.get("/students", async (req, res) => {
   try {
     const students = await User.find({
       role: { $ne: "admin" },
-      $or: [{ isApproved: true }, { hasCourseAccess: true }],
     })
-      .select("name email phone createdAt approvedAt")
+      .select("name email phone createdAt approvedAt isApproved hasCourseAccess")
       .sort({ approvedAt: -1, createdAt: -1 })
       .lean();
 
