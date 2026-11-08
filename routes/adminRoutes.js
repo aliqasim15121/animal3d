@@ -28,6 +28,24 @@ router.get("/payments", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch payments" });
   }
 });
+// All approved students (from Users, includes those without a Payment record)
+router.get("/students", async (req, res) => {
+  try {
+    const students = await User.find({
+      role: { $ne: "admin" },
+      $or: [{ isApproved: true }, { hasCourseAccess: true }],
+    })
+      .select("name email phone createdAt approvedAt")
+      .sort({ approvedAt: -1, createdAt: -1 })
+      .lean();
+
+    res.json(students);
+  } catch (err) {
+    console.error("Error fetching students:", err);
+    res.status(500).json({ message: "Failed to fetch students" });
+  }
+});
+
 // Get pending device approval requests
 router.get("/device-approvals", async (req, res) => {
   try {
