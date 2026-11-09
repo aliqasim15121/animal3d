@@ -6,8 +6,11 @@ import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 
 // ✅ Cloud name: CLOUDINARY_CLOUD_NAME → CLOUDINARY_NAME → from CLOUDINARY_URL (cloudinary://key:secret@cloud_name)
+const cloudNameKey = Object.keys(process.env).find(
+  (k) => k.toUpperCase() === "CLOUDINARY_CLOUD_NAME"
+); // case-insensitive (Render had "CLOUDINARY_Cloud_NAME")
 const cloudName =
-  process.env.CLOUDINARY_CLOUD_NAME?.trim() ||
+  process.env[cloudNameKey]?.trim() ||
   process.env.CLOUDINARY_NAME?.trim() ||
   (process.env.CLOUDINARY_URL || "").split("@")[1]?.trim();
 
@@ -19,16 +22,7 @@ cloudinary.config({
 });
 
 // ✅ Verify keys loaded
-console.log("☁️ cloud_name:", cloudName || "❌ MISSING");
-// Debug (no secret values): exact env key names + value lengths
-console.log(
-  "☁️ CLOUD env keys:",
-  Object.keys(process.env)
-    .filter((k) => k.toUpperCase().includes("CLOUD"))
-    .map((k) => `${JSON.stringify(k)}=${(process.env[k] || "").length}`)
-    .join(", ")
-);
-console.log("☁️ api_key:", process.env.CLOUDINARY_API_KEY ? "✅ SET" : "❌ MISSING");
+console.log("☁️ cloud_name:", cloudName || "❌ MISSING");console.log("☁️ api_key:", process.env.CLOUDINARY_API_KEY ? "✅ SET" : "❌ MISSING");
 console.log("☁️ api_secret:", process.env.CLOUDINARY_API_SECRET ? "✅ SET" : "❌ MISSING");
 
 // ✅ Cloudinary Storage
