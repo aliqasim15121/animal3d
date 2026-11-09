@@ -5,15 +5,21 @@ import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 
+// ✅ Cloud name: CLOUDINARY_CLOUD_NAME → CLOUDINARY_NAME → from CLOUDINARY_URL (cloudinary://key:secret@cloud_name)
+const cloudName =
+  process.env.CLOUDINARY_CLOUD_NAME?.trim() ||
+  process.env.CLOUDINARY_NAME?.trim() ||
+  (process.env.CLOUDINARY_URL || "").split("@")[1]?.trim();
+
 // ✅ Configure Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: cloudName,
+  api_key: process.env.CLOUDINARY_API_KEY?.trim(),
+  api_secret: process.env.CLOUDINARY_API_SECRET?.trim(),
 });
 
 // ✅ Verify keys loaded
-console.log("☁️ cloud_name:", process.env.CLOUDINARY_CLOUD_NAME || "❌ MISSING");
+console.log("☁️ cloud_name:", cloudName || "❌ MISSING");
 console.log("☁️ api_key:", process.env.CLOUDINARY_API_KEY ? "✅ SET" : "❌ MISSING");
 console.log("☁️ api_secret:", process.env.CLOUDINARY_API_SECRET ? "✅ SET" : "❌ MISSING");
 
