@@ -426,6 +426,15 @@ router.post("/google", async (req, res) => {
 /* =========================
    GET CURRENT USER
 ========================= */
+// Lightweight access check, polled by the course page for instant revoke
+router.get("/access-status", protect, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json({
+    isApproved:
+      req.user.role === "admin" || !!(req.user.isApproved || req.user.hasCourseAccess),
+  });
+});
+
 router.get("/me", protect, async (req, res) => {
   try {
     const user = await User.findById(req.user._id)

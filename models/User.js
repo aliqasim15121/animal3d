@@ -26,6 +26,7 @@ const userSchema = new mongoose.Schema(
     isApproved: { type: Boolean, default: false },
     approvedAt: { type: Date },
     hasCourseAccess: { type: Boolean, default: false },
+    trialAccess: { type: Boolean, default: false }, // admin-granted "pay later" access
 
     resetOtp: { type: String, default: undefined },
     resetOtpExpires: { type: Date, default: undefined },

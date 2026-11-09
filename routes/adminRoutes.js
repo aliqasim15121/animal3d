@@ -34,7 +34,7 @@ router.get("/students", async (req, res) => {
     const students = await User.find({
       role: { $ne: "admin" },
     })
-      .select("name email phone createdAt approvedAt isApproved hasCourseAccess")
+      .select("name email phone createdAt approvedAt isApproved hasCourseAccess trialAccess")
       .sort({ approvedAt: -1, createdAt: -1 })
       .lean();
 
@@ -42,6 +42,38 @@ router.get("/students", async (req, res) => {
   } catch (err) {
     console.error("Error fetching students:", err);
     res.status(500).json({ message: "Failed to fetch students" });
+  }
+});
+
+// Give trial (pay later) course access
+router.post("/users/:userId/trial-access", async (req, res) => {
+  try {
+    const user = await User.findOneAndUpdate(
+      { _id: req.params.userId, role: { $ne: "admin" } },
+      { $set: { isApproved: true, trialAccess: true, approvedAt: new Date() } },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ message: "Trial access granted" });
+  } catch (err) {
+    console.error("Error granting trial access:", err);
+    res.status(500).json({ message: "Failed to grant trial access" });
+  }
+});
+
+// Remove course access (takes effect on the student's open page within seconds)
+router.post("/users/:userId/revoke-access", async (req, res) => {
+  try {
+    const user = await User.findOneAndUpdate(
+      { _id: req.params.userId, role: { $ne: "admin" } },
+      { $set: { isApproved: false, hasCourseAccess: false, trialAccess: false } },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ message: "Access removed" });
+  } catch (err) {
+    console.error("Error revoking access:", err);
+    res.status(500).json({ message: "Failed to remove access" });
   }
 });
 
