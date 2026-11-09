@@ -20,6 +20,14 @@ cloudinary.config({
 
 // ✅ Verify keys loaded
 console.log("☁️ cloud_name:", cloudName || "❌ MISSING");
+// Debug (no secret values): exact env key names + value lengths
+console.log(
+  "☁️ CLOUD env keys:",
+  Object.keys(process.env)
+    .filter((k) => k.toUpperCase().includes("CLOUD"))
+    .map((k) => `${JSON.stringify(k)}=${(process.env[k] || "").length}`)
+    .join(", ")
+);
 console.log("☁️ api_key:", process.env.CLOUDINARY_API_KEY ? "✅ SET" : "❌ MISSING");
 console.log("☁️ api_secret:", process.env.CLOUDINARY_API_SECRET ? "✅ SET" : "❌ MISSING");
 
